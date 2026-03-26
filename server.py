@@ -45,7 +45,7 @@ async def search_library(query: str, limit: int = 10) -> list[dict]:
         limit: Max number of results to return (default 10)
     """
     async with httpx.AsyncClient() as client:
-        response = client.get(
+        response = await client.get(
             f"{BASE_URL}/items",
             headers=zotero_headers(),
             params={"q": query, "limit": limit, "format": "json"},
@@ -75,7 +75,7 @@ async def get_collections() -> list[dict]:
     Returns collection name, key, and item count.
     """
     async with httpx.AsyncClient() as client:
-        response = client.get(
+        response = await client.get(
             f"{BASE_URL}/collections",
             headers=zotero_headers(),
             params={"format": "json"},
@@ -104,7 +104,7 @@ async def get_items_in_collection(collection_key: str, limit: int = 20) -> list[
         limit: Max number of items to return (default 20)
     """
     async with httpx.AsyncClient() as client:
-        response = client.get(
+        response = await client.get(
             f"{BASE_URL}/collections/{collection_key}/items",
             headers=zotero_headers(),
             params={"limit": limit, "format": "json"},
@@ -135,7 +135,7 @@ async def get_item_details(item_key: str) -> dict:
         item_key: The item key (get this from search_library or get_items_in_collection)
     """
     async with httpx.AsyncClient() as client:
-        response = client.get(
+        response = await client.get(
             f"{BASE_URL}/items/{item_key}",
             headers=zotero_headers(),
             params={"format": "json"},
@@ -173,7 +173,7 @@ async def get_recent_items(limit: int = 10) -> list[dict]:
         limit: Number of recent items to return (default 10)
     """
     async with httpx.AsyncClient() as client:
-        response = client.get(
+        response = await client.get(
             f"{BASE_URL}/items",
             headers=zotero_headers(),
             params={"sort": "dateAdded", "direction": "desc", "limit": limit, "format": "json"},
