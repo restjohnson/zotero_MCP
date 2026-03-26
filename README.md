@@ -1,4 +1,4 @@
-# zotero_MPC
+
 # Zotero MCP Server
 
 A custom Model Context Protocol (MCP) server that connects your Zotero library to Claude.
