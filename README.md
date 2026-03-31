@@ -2,8 +2,7 @@
 
 A custom [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that connects your Zotero library to Claude Desktop. Once connected, you can search your library, browse collections, and retrieve full citation metadata directly in conversation.
 
-## Available Tools
-
+### Read
 | Tool | Description |
 |---|---|
 | `search_library` | Search your library by keyword (title, author, topic, etc.) |
@@ -11,7 +10,37 @@ A custom [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server 
 | `get_items_in_collection` | Fetch items from a specific collection |
 | `get_item_details` | Get full metadata for a specific item |
 | `get_recent_items` | Get the most recently added items |
+ 
+### Write
+| Tool | Description |
+|---|---|
+| `create_collection` | Create a new top-level or sub-collection |
+| `add_item_to_collection` | Add a paper to a collection (preserves existing memberships) |
+| `remove_item_from_collection` | Remove a paper from a collection without deleting it |
+| `update_item_tags` | Replace the tags on an item |
+ 
+### PDF
+| Tool | Description |
+|---|---|
+| `get_item_attachments` | List all attachments for an item (use this to find the PDF key) |
+| `get_pdf` | Download a PDF from Zotero cloud and return it for Claude to read |
 
+---
+## Example Workflows
+ 
+Once connected to Claude Desktop, you can run prompts like:
+ 
+**Thematic grouping:**
+> "Look at everything in my 'Agentic Methodology' collection, skim each paper using the PDF, and propose thematic sub-collections. Wait for my approval before making any changes."
+ 
+**Literature review:**
+> "Search my library for papers on Bayesian inference and write me a short thematic literature review."
+ 
+**Tagging:**
+> "Find all papers in my dissertation collection that don't have tags and suggest tags based on their abstracts."
+ 
+> ⚠️ For any workflow that writes to your library, always ask Claude to propose changes first before confirming. This gives you a chance to review before anything is created or moved.
+ 
 ---
 
 ## Requirements
@@ -19,6 +48,7 @@ A custom [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server 
 - Python 3.10 or higher
 - A Zotero account with an API key ([create one here](https://www.zotero.org/settings/keys))
 - Claude Desktop installed
+- For write and PDF tools: a **write-enabled** API key and PDFs synced to Zotero cloud storage
 
 ---
 
