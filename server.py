@@ -6,6 +6,7 @@ Exposes your Zotero library as tools for Claude via the Model Context Protocol.
 import os
 import logging
 import httpx
+import base64
 from mcp.server.fastmcp import FastMCP
 from dotenv import load_dotenv
 
@@ -194,6 +195,218 @@ async def get_recent_items(limit: int = 10) -> list[dict]:
         })
     return results
 
+# ── Write Tools ───────────────────────────────────────────────────────────────────
+@mcp.tool()
+async def create_collection(name: str, parent_key: str = None) -> dict:
+    """
+    Create a new collection in your Zotero library.
+    Can be a top-level collection or a sub-collection under an existing one.
+ 
+    Args:
+        name: Name of the new collection
+        parent_key: Key of the parent collection (optional — omit for top-level)
+    """
+    payload = {"name": name}
+    if parent_key:
+        payload["parentCollection"] = parent_key
+ 
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{BASE_URL}/collections",
+            headers={**zotero_headers(), "Content-Type": "application/json"},
+            json=[payload],
+        )
+        response.raise_for_status()
+        data = response.json()
+ 
+    created = data.get("successful", {}).get("0", {})
+    return {
+        "key": created.get("key"),
+        "name": created.get("data", {}).get("name"),
+        "parent_collection": created.get("data", {}).get("parentCollection"),
+    }
+ 
+ 
+@mcp.tool()
+async def add_item_to_collection(item_key: str, collection_key: str) -> dict:
+    """
+    Add an existing item to a collection.
+    Note: In Zotero, items can belong to multiple collections simultaneously.
+ 
+    Args:
+        item_key: The key of the item to add
+        collection_key: The key of the target collection
+    """
+    # First fetch the current item to get its existing collections
+    async with httpx.AsyncClient() as client:
+        get_response = await client.get(
+            f"{BASE_URL}/items/{item_key}",
+            headers=zotero_headers(),
+            params={"format": "json"},
+        )
+        get_response.raise_for_status()
+        item = get_response.json()
+ 
+    data = item.get("data", {})
+    existing_collections = data.get("collections", [])
+ 
+    if collection_key in existing_collections:
+        return {"status": "already_in_collection", "item_key": item_key, "collection_key": collection_key}
+ 
+    updated_collections = existing_collections + [collection_key]
+ 
+    async with httpx.AsyncClient() as client:
+        patch_response = await client.patch(
+            f"{BASE_URL}/items/{item_key}",
+            headers={
+                **zotero_headers(),
+                "Content-Type": "application/json",
+                "If-Unmodified-Since-Version": str(item.get("version", 0)),
+            },
+            json={"collections": updated_collections},
+        )
+        patch_response.raise_for_status()
+ 
+    return {"status": "success", "item_key": item_key, "collection_key": collection_key}
+ 
+ 
+@mcp.tool()
+async def remove_item_from_collection(item_key: str, collection_key: str) -> dict:
+    """
+    Remove an item from a specific collection (does not delete the item itself).
+ 
+    Args:
+        item_key: The key of the item
+        collection_key: The key of the collection to remove it from
+    """
+    async with httpx.AsyncClient() as client:
+        get_response = await client.get(
+            f"{BASE_URL}/items/{item_key}",
+            headers=zotero_headers(),
+            params={"format": "json"},
+        )
+        get_response.raise_for_status()
+        item = get_response.json()
+ 
+    data = item.get("data", {})
+    existing_collections = data.get("collections", [])
+    updated_collections = [c for c in existing_collections if c != collection_key]
+ 
+    async with httpx.AsyncClient() as client:
+        patch_response = await client.patch(
+            f"{BASE_URL}/items/{item_key}",
+            headers={
+                **zotero_headers(),
+                "Content-Type": "application/json",
+                "If-Unmodified-Since-Version": str(item.get("version", 0)),
+            },
+            json={"collections": updated_collections},
+        )
+        patch_response.raise_for_status()
+ 
+    return {"status": "success", "item_key": item_key, "removed_from": collection_key}
+ 
+ 
+@mcp.tool()
+async def update_item_tags(item_key: str, tags: list[str]) -> dict:
+    """
+    Replace the tags on an item with a new set of tags.
+ 
+    Args:
+        item_key: The key of the item to update
+        tags: List of tag strings to apply
+    """
+    async with httpx.AsyncClient() as client:
+        get_response = await client.get(
+            f"{BASE_URL}/items/{item_key}",
+            headers=zotero_headers(),
+            params={"format": "json"},
+        )
+        get_response.raise_for_status()
+        item = get_response.json()
+ 
+    tag_objects = [{"tag": t} for t in tags]
+ 
+    async with httpx.AsyncClient() as client:
+        patch_response = await client.patch(
+            f"{BASE_URL}/items/{item_key}",
+            headers={
+                **zotero_headers(),
+                "Content-Type": "application/json",
+                "If-Unmodified-Since-Version": str(item.get("version", 0)),
+            },
+            json={"tags": tag_objects},
+        )
+        patch_response.raise_for_status()
+ 
+    return {"status": "success", "item_key": item_key, "tags": tags}
+ 
+ 
+# ── PDF Tools ─────────────────────────────────────────────────────────────────
+ 
+@mcp.tool()
+async def get_item_attachments(item_key: str) -> list[dict]:
+    """
+    List all attachments for a Zotero item (PDFs, snapshots, links, etc.)
+    Use this to find the attachment key before calling get_pdf.
+ 
+    Args:
+        item_key: The key of the parent item
+    """
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{BASE_URL}/items/{item_key}/children",
+            headers=zotero_headers(),
+            params={"format": "json"},
+        )
+        response.raise_for_status()
+        children = response.json()
+ 
+    return [
+        {
+            "key": child.get("key"),
+            "title": child.get("data", {}).get("title", "Untitled"),
+            "link_mode": child.get("data", {}).get("linkMode", ""),
+            "content_type": child.get("data", {}).get("contentType", ""),
+            "filename": child.get("data", {}).get("filename", ""),
+        }
+        for child in children
+        if child.get("data", {}).get("itemType") == "attachment"
+    ]
+ 
+ 
+@mcp.tool()
+async def get_pdf(attachment_key: str) -> dict:
+    """
+    Download a PDF attachment from Zotero and return it as base64 for Claude to read.
+    Use get_item_attachments first to find the attachment key.
+ 
+    Args:
+        attachment_key: The key of the PDF attachment (not the parent item key)
+    """
+    async with httpx.AsyncClient(follow_redirects=True, timeout=60.0) as client:
+        response = await client.get(
+            f"{BASE_URL}/items/{attachment_key}/file",
+            headers=zotero_headers(),
+        )
+        response.raise_for_status()
+ 
+        content_type = response.headers.get("content-type", "application/pdf")
+        pdf_bytes = response.content
+ 
+    if not pdf_bytes:
+        return {"error": "No file content returned. The PDF may not be synced to Zotero's cloud."}
+ 
+    pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+ 
+    return {
+        "attachment_key": attachment_key,
+        "content_type": content_type,
+        "size_bytes": len(pdf_bytes),
+        "data": pdf_base64,
+        "encoding": "base64",
+        "note": "Pass the 'data' field to Claude as a base64-encoded PDF document for reading.",
+    }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
