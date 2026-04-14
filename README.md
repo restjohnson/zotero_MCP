@@ -73,6 +73,10 @@ py -3.10 -m pip install -r requirements.txt
 ```bash
 py -3.10 server.py
 ```
+For Mac:
+```bash
+python3.10 server.py
+```
 
 You should see: `Starting Zotero MCP server...`
 
@@ -96,7 +100,7 @@ You can also access it from Claude Desktop: **File → Settings → Developer �
 {
   "mcpServers": {
     "zotero": {
-      "command": "C:\\Windows\\py.exe",
+      "command": "C:\\Windows\\py.exe", #system location of your python
       "args": ["-3.10", "C:\\full\\path\\to\\server.py"],
       "env": {
         "ZOTERO_USER_ID": "your_user_id_here",
